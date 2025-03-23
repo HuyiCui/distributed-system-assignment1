@@ -40,10 +40,11 @@ export class Assignment1Stack extends cdk.Stack {
       handler: 'handler',
       environment: { TABLE_NAME: productsTable.tableName },
     });
-    productsTable.grantReadData(translateProductFn);
+    productsTable.grantReadWriteData(translateProductFn);
 
     translateProductFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['translate:TranslateText',
+      actions: [
+        'translate:TranslateText',
         'comprehend:DetectDominantLanguage'
       ],
       resources: ['*'],
@@ -52,7 +53,7 @@ export class Assignment1Stack extends cdk.Stack {
 
     const updateProductFn = new lambdanode.NodejsFunction(this, 'UpdateProductFn', {
       runtime: lambda.Runtime.NODEJS_18_X,
-      entry: 'lambdas/updateProduct.ts',  
+      entry: 'lambdas/updateProduct.ts',
       handler: 'handler',
       environment: { TABLE_NAME: productsTable.tableName },
     });
@@ -64,24 +65,40 @@ export class Assignment1Stack extends cdk.Stack {
       },
       deployOptions: { stageName: 'dev' },
       defaultCorsPreflightOptions: {
-        allowHeaders: ['Content-Type'],
-        allowMethods: ['OPTIONS', 'GET', 'POST'],
-        allowCredentials:true,
+        allowHeaders: ['Content-Type', 'x-api-key'],  
+        allowMethods: ['OPTIONS', 'GET', 'POST', 'PUT'],
+        allowCredentials: true,
         allowOrigins: ['*'],
       },
     });
 
+    const apiKey = api.addApiKey('Assignment1ApiKey');
+
+    const plan = api.addUsagePlan('UsagePlan', {
+      name: 'BasicPlan',
+      apiStages: [{ api, stage: api.deploymentStage }],
+    });
+    plan.addApiKey(apiKey);
+
     const products = api.root.addResource('products');
-    products.addMethod('POST', new apig.LambdaIntegration(addProductFn));
+    products.addMethod('POST', new apig.LambdaIntegration(addProductFn), {
+      apiKeyRequired: true 
+    });
 
     const productRoute = products.addResource('{productName}');
+
     productRoute.addMethod('GET', new apig.LambdaIntegration(getProductsByStoreFn));
 
     const storeRoute = productRoute.addResource('{storeName}');
-    storeRoute.addMethod('PUT', new apig.LambdaIntegration(updateProductFn));
+
+    storeRoute.addMethod('PUT', new apig.LambdaIntegration(updateProductFn), {
+      apiKeyRequired: true 
+    });
 
     const translationRoute = storeRoute.addResource('translation');
     translationRoute.addMethod('GET', new apig.LambdaIntegration(translateProductFn));
 
+    new cdk.CfnOutput(this, 'APIURL', { value: api.url });
+    new cdk.CfnOutput(this, 'APIKeyID', { value: apiKey.keyId });
   }
 }

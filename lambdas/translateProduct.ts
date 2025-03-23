@@ -1,6 +1,6 @@
 import { Handler } from "aws-lambda";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { TranslateClient, TranslateTextCommand } from "@aws-sdk/client-translate";
 
 const ddbClient = new DynamoDBClient({});
@@ -20,16 +20,25 @@ export const handler: Handler = async (event) => {
       };
     }
 
-    const getRes = await ddbDocClient.send(
-      new GetCommand({
-        TableName: process.env.TABLE_NAME!,
-        Key: { productName, storeName },
-      })
-    );
+    const getRes = await ddbDocClient.send(new GetCommand({
+      TableName: process.env.TABLE_NAME!,
+      Key: { productName, storeName },
+    }));
     if (!getRes.Item) {
       return {
         statusCode: 404,
         body: JSON.stringify({ message: "Product not found" }),
+      };
+    }
+
+    if (getRes.Item.translatedNames && getRes.Item.translatedNames[language]) {
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          productName: getRes.Item.productName,
+          translated: getRes.Item.translatedNames[language],
+          cached: true,
+        }),
       };
     }
 
@@ -40,12 +49,26 @@ export const handler: Handler = async (event) => {
         Text: getRes.Item.productName,
       })
     );
+    const translatedText = translateRes.TranslatedText;
+
+    const existingTranslations = getRes.Item.translatedNames || {};
+    existingTranslations[language] = translatedText;
+
+    await ddbDocClient.send(new UpdateCommand({
+      TableName: process.env.TABLE_NAME!,
+      Key: { productName, storeName },
+      UpdateExpression: "SET translatedNames = :tn",
+      ExpressionAttributeValues: {
+        ":tn": existingTranslations
+      }
+    }));
 
     return {
       statusCode: 200,
       body: JSON.stringify({
         productName: getRes.Item.productName,
-        translated: translateRes.TranslatedText,
+        translated: translatedText,
+        cached: false
       }),
     };
   } catch (err) {
