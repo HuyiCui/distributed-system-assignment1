@@ -2,86 +2,55 @@
 
 __Name:__ Huyi Cui
 
-__Demo:__ ... link to your YouTube video demonstration ......
+__Demo:__ [... link to your YouTube video demonstration ......](https://youtu.be/_3cVosGDbxI)
 
 ### Context.
 
-State the context you chose for your web API and detail the attributes of the DynamoDB table items, e.g.
-
-Context: Movie Cast
+I chose to build a web API for a simple Product Management system. The DynamoDB table holds items for each product in a particular store, with the following attributes:
 
 Table item attributes:
-+ MovieID - number  (Partition key)
-+ ActorID - number  (Sort Key)
-+ RoleName - string
-+ RoleDescription - string
-+ AwardsWon - List<string>
-+ etc
++ productName - string (Partition Key)
++ storeName - string (Sort Key)
++ price - number
++ quantity - number
++ translatedNames - Map<string, string> (for caching translations)
 
 ### App API endpoints.
 
 [ Provide a bullet-point list of the app's endpoints (excluding the Auth API) you have successfully implemented. ]
 e.g.
  
-+ POST /thing - add a new 'thing'.
-+ GET /thing/{partition-key}/ - Get all the 'things' with a specified partition key.
-+ GEtT/thing/{partition-key}?attributeX=value - Get all the 'things' with a specified partition key value and its attributeX satisfying the condition .....
-+ etc
++ POST /products - Add a new product item. (Protected by API Key in my final step)
++ GET /products/{productName} - Get products by name.
++ GET /products/{productName}?minPrice=xxx - Retrieves all records matching the specified productName. Optional query minPrice filters items whose price >= minPrice.the condition .....
++ PUT /products/{productName}/{storeName} - Updates certain attributes (e.g., price, quantity) of a specific item identified by (productName, storeName). (Protected by API Key)
++ GET /products/{productName}/{storeName}/translation?language=xx - Translates productName into a target language (e.g., fr) and returns it, caching the result in DynamoDB for repeated calls. 
 
 
 ### Features.
 
 #### Translation persistence (if completed)
 
-[ Explain briefly your solution to the translation persistence requirement - no code excerpts required. Show the structure of a table item that includes review translations, e.g.
-
-+ MovieID - number  (Partition key)
-+ ActorID - number  (Sort Key)
-+ RoleName - string
-+ RoleDescription - string
-+ AwardsWon - List<string>
-+ Translations - ?
-]
-
-#### Custom L2 Construct (if completed)
-
-[State briefly the infrastructure provisioned by your custom L2 construct. Show the structure of its input props object and list the public properties it exposes, e.g. taken from the Cognito lab,
-
-Construct Input props object:
-~~~
-type AuthApiProps = {
- userPoolId: string;
- userPoolClientId: string;
-}
-~~~
-Construct public properties
-~~~
-export class MyConstruct extends Construct {
- public  PropertyName: type
- etc.
-~~~
- ]
-
-#### Multi-Stack app (if completed)
-
-[Explain briefly the stack composition of your app - no code excerpts required.]
-
-#### Lambda Layers (if completed)
-
-[Explain briefly where you used the Layers feature of the AWS Lambda service - no code excerpts required.]
-
+I store the translations in a translatedNames map attribute on each DynamoDB item. After calling the Amazon Translate service once, I write the translated text back to DynamoDB under translatedNames[language]. On subsequent calls for the same language, the code checks if translatedNames[language] exists:
 
 #### API Keys. (if completed)
 
-[Explain briefly how to implement API key authentication to protect API Gateway endpoints. Include code excerpts from your app to support this. ][]
+I implemented API key authentication to protect POST and PUT operations. My CDK code snippet looks like this:
 
-~~~ts
-// This is a code excerpt markdown 
-let foo : string = 'Foo'
-console.log(foo)
-~~~
+const api = new apig.RestApi(this, 'MyApi', { ... });
 
-###  Extra (If relevant).
+// Create API Key
+const apiKey = api.addApiKey('MyApiKey');
+const plan = api.addUsagePlan('UsagePlan', {
+  name: 'BasicPlan',
+  apiStages: [{ api, stage: api.deploymentStage }],
+});
+plan.addApiKey(apiKey);
 
-[ State any other aspects of your solution that use CDK/serverless features not covered in the lectures ]
+// Protect the POST route
+products.addMethod('POST', new apig.LambdaIntegration(addProductFn), {
+  apiKeyRequired: true,
+});
+When calling the POST or PUT endpoints, I include a header:
 
+x-api-key: [the actual API key value copied from the console]
