@@ -34,7 +34,7 @@ export const handler: Handler = async (event) => {
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ products: queryResult.Items || [] }),
+      body: JSON.stringify({ products: items }),
     };
   } catch (err) {
     console.error(err);

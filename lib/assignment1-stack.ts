@@ -43,7 +43,9 @@ export class Assignment1Stack extends cdk.Stack {
     productsTable.grantReadData(translateProductFn);
 
     translateProductFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['translate:TranslateText'],
+      actions: ['translate:TranslateText',
+        'comprehend:DetectDominantLanguage'
+      ],
       resources: ['*'],
       effect: iam.Effect.ALLOW,
     }));
