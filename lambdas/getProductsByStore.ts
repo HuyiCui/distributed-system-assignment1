@@ -8,6 +8,7 @@ const ddbDocClient = DynamoDBDocumentClient.from(ddbClient);
 export const handler: Handler = async (event) => {
   try {
     const productName = event.pathParameters?.productName;
+    const minPrice = event.queryStringParameters?.minPrice;
 
     if (!productName) {
       return {
@@ -23,6 +24,13 @@ export const handler: Handler = async (event) => {
         ExpressionAttributeValues: { ":productName": productName },
       })
     );
+
+    let items = queryResult.Items || [];
+
+    if (minPrice !== undefined) {
+      const min = parseFloat(minPrice);
+      items = items.filter((item) => item.price >= min);
+    }
 
     return {
       statusCode: 200,
